@@ -26,6 +26,7 @@
       </div>
       <nav class="nav" aria-label="主导航">
         <button class="nav-btn active" data-view="today">今日</button>
+        <button class="nav-btn" data-view="search">搜索</button>
         <button class="nav-btn" data-view="chapters">章节</button>
         <button class="nav-btn" data-view="wrongbook">错题本</button>
         <button class="nav-btn" data-view="library">词库</button>
@@ -118,6 +119,23 @@
       </section>
 
 
+      <section id="view-search" class="view">
+        <section class="card">
+          <div class="card-heading">
+            <div>
+              <p class="eyebrow">搜索词库</p>
+              <h2>直接搜索词语</h2>
+              <p class="muted">可以输入词语、释义或分组，并直接加入错题本。</p>
+            </div>
+          </div>
+          <div class="search-hero">
+            <input id="wordSearchInput" type="search" placeholder="例如：剑走偏锋、传承、成语·第4组">
+            <button id="clearSearchBtn" class="btn btn-ghost">清空</button>
+          </div>
+          <div id="searchResults" class="search-results"></div>
+          <p id="searchEmpty" class="empty-state">输入词语开始搜索。</p>
+        </section>
+      </section>
       <section id="view-chapters" class="view">
         <section class="card">
           <div class="card-heading library-heading">
@@ -412,6 +430,7 @@
   <script>if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js")); }</script>
 </body>
 </html>
+
 
 
 
