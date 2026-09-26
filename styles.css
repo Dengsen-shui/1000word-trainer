@@ -1469,3 +1469,27 @@ td {
     grid-template-columns: 1fr;
   }
 }
+
+.meaning-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.meaning-editor textarea {
+  width: 100%;
+  min-height: 110px;
+  padding: 12px;
+  border: 1px solid var(--primary);
+  border-radius: 11px;
+  outline: none;
+  background: white;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.meaning-editor-actions {
+  display: flex;
+  gap: 8px;
+}
