@@ -121,12 +121,13 @@
 
       <section id="view-search" class="view">
         <section class="card">
-          <div class="card-heading">
+          <div class="card-heading library-heading">
             <div>
               <p class="eyebrow">搜索词库</p>
               <h2>直接搜索词语</h2>
               <p class="muted">可以输入词语、释义或分组，并直接加入错题本。</p>
             </div>
+            <button id="addWordBtn" class="btn btn-primary">新增词语</button>
           </div>
           <div class="search-hero">
             <input id="wordSearchInput" type="search" placeholder="例如：剑走偏锋、传承、成语·第4组">
@@ -394,6 +395,55 @@
     </div>
   </div>
 
+  <div id="wordEditorModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="编辑词条">
+    <div class="dialog-card">
+      <div class="card-heading">
+        <div>
+          <p class="eyebrow">词条编辑</p>
+          <h2 id="wordEditorTitle">新增词语</h2>
+        </div>
+        <button id="wordEditorCloseBtn" class="icon-btn" aria-label="关闭">×</button>
+      </div>
+      <form id="wordEditorForm" class="form-grid">
+        <label>
+          <span>词语 *</span>
+          <input id="editorWordInput" type="text" required>
+        </label>
+        <label>
+          <span>分组</span>
+          <input id="editorPackInput" type="text" placeholder="例如：自定义词、成语·第20组">
+        </label>
+        <label class="span-2">
+          <span>完整释义 *</span>
+          <textarea id="editorMeaningInput" required></textarea>
+        </label>
+        <label class="span-2">
+          <span>用法 / 使用条件</span>
+          <input id="editorUsageInput" type="text">
+        </label>
+        <label class="span-2">
+          <span>使用场景</span>
+          <textarea id="editorScenarioInput"></textarea>
+        </label>
+        <label class="span-2">
+          <span>例句1</span>
+          <textarea id="editorExample1Input"></textarea>
+        </label>
+        <label class="span-2">
+          <span>例句2</span>
+          <textarea id="editorExample2Input"></textarea>
+        </label>
+        <label class="span-2">
+          <span>例句3</span>
+          <textarea id="editorExample3Input"></textarea>
+        </label>
+      </form>
+      <div class="dialog-actions">
+        <button id="wordEditorCancelBtn" class="btn btn-ghost" type="button">取消</button>
+        <button id="wordEditorSaveBtn" class="btn btn-primary" type="button">保存词条</button>
+      </div>
+    </div>
+  </div>
   <div id="importModal" class="modal hidden" role="dialog" aria-modal="true" aria-label="导入题库">
     <div class="dialog-card">
       <div class="card-heading">
@@ -430,6 +480,7 @@
   <script>if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("./sw.js")); }</script>
 </body>
 </html>
+
 
 
 
