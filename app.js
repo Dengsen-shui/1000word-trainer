@@ -124,6 +124,8 @@
     $("downloadTemplateBtn").addEventListener("click", downloadTemplate);
     $("downloadTemplateDialogBtn").addEventListener("click", downloadTemplate);
 
+    $("wordSearchInput").addEventListener("input", renderSearchResults);
+    $("clearSearchBtn").addEventListener("click", () => { $("wordSearchInput").value = ""; renderSearchResults(); $("wordSearchInput").focus(); });
     $("librarySearch").addEventListener("input", renderLibrary);
     $("libraryStatus").addEventListener("change", renderLibrary);
     $("libraryPack").addEventListener("change", renderLibrary);
@@ -160,6 +162,7 @@
       button.classList.toggle("active", button.dataset.view === viewName);
     });
 
+    if (viewName === "search") { renderSearchResults(); $("wordSearchInput").focus(); }
     if (viewName === "chapters") renderChapters();
     if (viewName === "wrongbook") renderWrongBook();
     if (viewName === "library") renderLibrary();
@@ -176,6 +179,111 @@
     renderSettings();
   }
 
+  function isInWrongBook(wordId) {
+    const progress = state.progress[wordId];
+    return Boolean(progress && (progress.manualWrong || progress.wrongCount > 0));
+  }
+
+  function addToWrongBook(wordId, notify = true) {
+    const progress = getOrCreateProgress(wordId);
+    progress.manualWrong = true;
+    progress.wrongCount = Math.max(progress.wrongCount || 0, 1);
+    progress.correctStreak = 0;
+    progress.stage = 0;
+    progress.nextReview = todayKey();
+    saveState();
+    renderAll();
+    if (notify) showToast("已加入错题本。");
+  }
+
+  function startSingleWord(wordId) {
+    const word = state.words.find((item) => item.id === wordId);
+    if (!word) return;
+    startSessionFromWords([word], "search");
+  }
+
+  function renderSearchResults() {
+    const input = $("wordSearchInput");
+    const query = input.value.trim().toLowerCase();
+    const container = $("searchResults");
+    const empty = $("searchEmpty");
+    container.replaceChildren();
+
+    if (!query) {
+      empty.textContent = "输入词语开始搜索。";
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    const matches = state.words
+      .map((word) => {
+        const wordText = word.word.toLowerCase();
+        const haystack = [word.word, word.meaning, word.pack, word.usage, word.confusable, word.tags, ...(word.examples || [])]
+          .join(" ")
+          .toLowerCase();
+        let score = 0;
+        if (wordText === query) score = 100;
+        else if (wordText.startsWith(query)) score = 80;
+        else if (wordText.includes(query)) score = 60;
+        else if (haystack.includes(query)) score = 30;
+        return { word, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score || a.word.word.localeCompare(b.word.word, "zh-CN"))
+      .slice(0, 80);
+
+    if (!matches.length) {
+      empty.textContent = `没有找到“${input.value.trim()}”。`;
+      empty.classList.remove("hidden");
+      return;
+    }
+
+    empty.classList.add("hidden");
+    matches.forEach(({ word }) => {
+      const status = getWordStatus(word.id);
+      const inWrongBook = isInWrongBook(word.id);
+      const card = document.createElement("article");
+      card.className = "search-result-card";
+
+      const head = document.createElement("div");
+      head.className = "search-result-head";
+      const left = document.createElement("div");
+      const title = document.createElement("h3");
+      title.className = "search-result-word";
+      title.textContent = word.word;
+      const meta = document.createElement("div");
+      meta.className = "search-result-meta";
+      meta.textContent = `${word.pack || "未分类"} · ${status.label}`;
+      left.append(title, meta);
+      head.append(left);
+
+      const meaning = document.createElement("div");
+      meaning.className = "search-result-meaning";
+      meaning.textContent = word.meaning;
+
+      const actions = document.createElement("div");
+      actions.className = "search-result-actions";
+      const studyButton = document.createElement("button");
+      studyButton.type = "button";
+      studyButton.className = "btn btn-primary";
+      studyButton.textContent = "看词卡";
+      studyButton.addEventListener("click", () => startSingleWord(word.id));
+
+      const wrongButton = document.createElement("button");
+      wrongButton.type = "button";
+      wrongButton.className = inWrongBook ? "btn btn-ghost" : "btn btn-danger";
+      wrongButton.textContent = inWrongBook ? "移出错题本" : "加入错题本";
+      wrongButton.addEventListener("click", () => {
+        if (inWrongBook) removeFromWrongBook(word.id, false);
+        else addToWrongBook(word.id);
+        renderSearchResults();
+      });
+
+      actions.append(studyButton, wrongButton);
+      card.append(head, meaning, actions);
+      container.append(card);
+    });
+  }
   function handleChapterAction(event) {
     const button = event.target.closest("[data-chapter-action]");
     if (!button) return;
@@ -400,7 +508,7 @@
     $("wrongBookEmpty").classList.toggle("hidden", words.length > 0);
   }
 
-  function removeFromWrongBook(wordId) {
+  function removeFromWrongBook(wordId, notify = true) {
     const progress = state.progress[wordId];
     if (!progress) return;
     progress.manualWrong = false;
@@ -1552,6 +1660,9 @@
     return (hash >>> 0).toString(36);
   }
 })();
+
+
+
 
 
 
