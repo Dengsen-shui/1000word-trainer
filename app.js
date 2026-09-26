@@ -65,6 +65,7 @@
       const seedById = new Map(fallback.words.map((word) => [word.id, word]));
       const seedByWord = new Map(fallback.words.map((word) => [word.word, word]));
       const mergedWords = savedWords.map((word) => {
+        if (word.localOverride) return word;
         const seed = seedByWord.get(word.word) || seedById.get(word.id);
         return seed ? { ...seed, id: word.id || seed.id } : word;
       });
@@ -278,7 +279,7 @@
       const editButton = document.createElement("button");
       editButton.type = "button";
       editButton.className = "btn btn-ghost";
-      editButton.textContent = "编辑释义";
+      editButton.textContent = "编辑词条";
       editButton.addEventListener("click", () => openWordEditor(word));
 
       const wrongButton = document.createElement("button");
@@ -343,6 +344,7 @@
       const word = state.words.find((item) => item.id === editingWordId);
       if (!word) return;
       const oldMeaning = word.meaning;
+      word.localOverride = true;
       word.word = wordText;
       word.meaning = meaning;
       word.pack = pack;
@@ -355,6 +357,7 @@
       const id = `custom-${hashString(`${pack}::${wordText}`)}`;
       state.words.push({
         id,
+        localOverride: true,
         pack,
         word: wordText,
         meaning,
@@ -1749,48 +1752,3 @@
     return (hash >>> 0).toString(36);
   }
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
