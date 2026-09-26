@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = "1000word-trainer-v16";
+﻿const CACHE_NAME = "1000word-trainer-v17";
 const APP_ASSETS = [
   "./",
   "./index.html",
@@ -40,5 +40,6 @@ self.addEventListener("fetch", (event) => {
     })
   );
 });
+
 
 
