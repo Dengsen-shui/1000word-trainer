@@ -269,6 +269,12 @@
       studyButton.textContent = "看词卡";
       studyButton.addEventListener("click", () => startSingleWord(word.id));
 
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "btn btn-ghost";
+      editButton.textContent = "编辑释义";
+      editButton.addEventListener("click", () => openMeaningEditor(word, meaning, actions));
+
       const wrongButton = document.createElement("button");
       wrongButton.type = "button";
       wrongButton.className = inWrongBook ? "btn btn-ghost" : "btn btn-danger";
@@ -279,10 +285,50 @@
         renderSearchResults();
       });
 
-      actions.append(studyButton, wrongButton);
+      actions.append(studyButton, editButton, wrongButton);
       card.append(head, meaning, actions);
       container.append(card);
     });
+  }
+  function openMeaningEditor(word, meaningElement, actionsElement) {
+    const editor = document.createElement("div");
+    editor.className = "meaning-editor";
+    const textarea = document.createElement("textarea");
+    textarea.value = word.meaning;
+    textarea.setAttribute("aria-label", `编辑${word.word}的释义`);
+    const buttons = document.createElement("div");
+    buttons.className = "meaning-editor-actions";
+
+    const saveButton = document.createElement("button");
+    saveButton.type = "button";
+    saveButton.className = "btn btn-primary";
+    saveButton.textContent = "保存";
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "btn btn-ghost";
+    cancelButton.textContent = "取消";
+
+    saveButton.addEventListener("click", () => {
+      const value = textarea.value.trim();
+      if (!value) {
+        showToast("释义不能为空。");
+        textarea.focus();
+        return;
+      }
+      const previousMeaning = word.meaning;
+      word.meaning = value;
+      if (!word.confusable || word.confusable === previousMeaning) word.confusable = value;
+      saveState();
+      renderAll();
+      showToast("释义已保存到当前设备。");
+    });
+
+    cancelButton.addEventListener("click", () => renderSearchResults());
+    buttons.append(saveButton, cancelButton);
+    editor.append(textarea, buttons);
+    meaningElement.replaceWith(editor);
+    actionsElement.classList.add("hidden");
+    textarea.focus();
   }
   function handleChapterAction(event) {
     const button = event.target.closest("[data-chapter-action]");
@@ -1660,6 +1706,7 @@
     return (hash >>> 0).toString(36);
   }
 })();
+
 
 
 
