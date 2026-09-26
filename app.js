@@ -25,6 +25,7 @@
   let selectedValue = null;
   let answered = false;
   let currentAttemptRecord = null;
+  let editingWordId = null;
   let autoAdvanceTimer = null;
 
   const $ = (id) => document.getElementById(id);
@@ -114,6 +115,11 @@
     $("startReviewBtn").addEventListener("click", () => startSession("due"));
     $("startNewBtn").addEventListener("click", () => startSession("new"));
 
+    $("addWordBtn").addEventListener("click", () => openWordEditor(null));
+    $("wordEditorCloseBtn").addEventListener("click", closeWordEditor);
+    $("wordEditorCancelBtn").addEventListener("click", closeWordEditor);
+    $("wordEditorSaveBtn").addEventListener("click", saveWordEditor);
+    $("wordEditorForm").addEventListener("submit", (event) => { event.preventDefault(); saveWordEditor(); });
     $("headerImportBtn").addEventListener("click", openImportModal);
     $("libraryImportBtn").addEventListener("click", openImportModal);
     $("chapterImportBtn").addEventListener("click", openImportModal);
@@ -273,7 +279,7 @@
       editButton.type = "button";
       editButton.className = "btn btn-ghost";
       editButton.textContent = "编辑释义";
-      editButton.addEventListener("click", () => openMeaningEditor(word, meaning, actions));
+      editButton.addEventListener("click", () => openWordEditor(word));
 
       const wrongButton = document.createElement("button");
       wrongButton.type = "button";
@@ -290,45 +296,82 @@
       container.append(card);
     });
   }
-  function openMeaningEditor(word, meaningElement, actionsElement) {
-    const editor = document.createElement("div");
-    editor.className = "meaning-editor";
-    const textarea = document.createElement("textarea");
-    textarea.value = word.meaning;
-    textarea.setAttribute("aria-label", `编辑${word.word}的释义`);
-    const buttons = document.createElement("div");
-    buttons.className = "meaning-editor-actions";
+  function openWordEditor(word = null) {
+    editingWordId = word?.id || null;
+    const examples = word ? (Array.isArray(word.examples) && word.examples.length ? word.examples : [word.example || ""]) : [];
+    $("wordEditorTitle").textContent = word ? "编辑词条" : "新增词语";
+    $("editorWordInput").value = word?.word || "";
+    $("editorPackInput").value = word?.pack || "自定义词";
+    $("editorMeaningInput").value = word?.meaning || "";
+    $("editorUsageInput").value = word?.usage || "";
+    $("editorScenarioInput").value = word?.scenario || "";
+    $("editorExample1Input").value = examples[0] || "";
+    $("editorExample2Input").value = examples[1] || "";
+    $("editorExample3Input").value = examples[2] || "";
+    $("wordEditorModal").classList.remove("hidden");
+    $("editorWordInput").focus();
+  }
 
-    const saveButton = document.createElement("button");
-    saveButton.type = "button";
-    saveButton.className = "btn btn-primary";
-    saveButton.textContent = "保存";
-    const cancelButton = document.createElement("button");
-    cancelButton.type = "button";
-    cancelButton.className = "btn btn-ghost";
-    cancelButton.textContent = "取消";
+  function closeWordEditor() {
+    $("wordEditorModal").classList.add("hidden");
+    editingWordId = null;
+  }
 
-    saveButton.addEventListener("click", () => {
-      const value = textarea.value.trim();
-      if (!value) {
-        showToast("释义不能为空。");
-        textarea.focus();
-        return;
-      }
-      const previousMeaning = word.meaning;
-      word.meaning = value;
-      if (!word.confusable || word.confusable === previousMeaning) word.confusable = value;
-      saveState();
-      renderAll();
-      showToast("释义已保存到当前设备。");
-    });
+  function saveWordEditor() {
+    const wasEditing = Boolean(editingWordId);
+    const wordText = $("editorWordInput").value.trim();
+    const meaning = $("editorMeaningInput").value.trim();
+    const pack = $("editorPackInput").value.trim() || "自定义词";
+    if (!wordText || !meaning) {
+      showToast("词语和完整释义不能为空。");
+      return;
+    }
 
-    cancelButton.addEventListener("click", () => renderSearchResults());
-    buttons.append(saveButton, cancelButton);
-    editor.append(textarea, buttons);
-    meaningElement.replaceWith(editor);
-    actionsElement.classList.add("hidden");
-    textarea.focus();
+    const duplicate = state.words.find((item) => item.word === wordText && item.id !== editingWordId);
+    if (duplicate) {
+      showToast(`“${wordText}”已经存在。`);
+      return;
+    }
+
+    const examples = [
+      $("editorExample1Input").value.trim(),
+      $("editorExample2Input").value.trim(),
+      $("editorExample3Input").value.trim()
+    ].filter(Boolean).slice(0, 3);
+
+    if (editingWordId) {
+      const word = state.words.find((item) => item.id === editingWordId);
+      if (!word) return;
+      const oldMeaning = word.meaning;
+      word.word = wordText;
+      word.meaning = meaning;
+      word.pack = pack;
+      word.usage = $("editorUsageInput").value.trim();
+      word.scenario = $("editorScenarioInput").value.trim();
+      word.examples = examples;
+      word.example = examples[0] || "";
+      if (!word.confusable || word.confusable === oldMeaning) word.confusable = meaning;
+    } else {
+      const id = `custom-${hashString(`${pack}::${wordText}`)}`;
+      state.words.push({
+        id,
+        pack,
+        word: wordText,
+        meaning,
+        usage: $("editorUsageInput").value.trim(),
+        scenario: $("editorScenarioInput").value.trim(),
+        example: examples[0] || "",
+        examples,
+        confusable: meaning,
+        tags: "手动添加"
+      });
+    }
+
+    saveState();
+    closeWordEditor();
+    renderAll();
+    showToast(wasEditing ? "词条已更新。" : "新词已加入词库。");
+    renderSearchResults();
   }
   function handleChapterAction(event) {
     const button = event.target.closest("[data-chapter-action]");
@@ -1706,6 +1749,10 @@
     return (hash >>> 0).toString(36);
   }
 })();
+
+
+
+
 
 
 
