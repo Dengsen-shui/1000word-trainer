@@ -11,6 +11,8 @@
     instantSubmit: true
   };
 
+  const REVIEW_GROUP_SIZE = 7;
+
   const MODE_LABELS = {
     due: "到期复习",
     new: "新词速刷",
@@ -147,6 +149,7 @@
     $("quizSubmitBtn").addEventListener("click", submitAnswer);
     $("quizNextBtn").addEventListener("click", nextQuestion);
     $("revealMeaningBtn").addEventListener("click", revealMeaning);
+    $("quizEditWordBtn").addEventListener("click", editCurrentWord);
     $("rememberedBtn").addEventListener("click", () => assessCard(true));
     $("addWrongBookBtn").addEventListener("click", () => assessCard(false));
     $("startWrongBookBtn").addEventListener("click", () => startSession("wrong"));
@@ -318,7 +321,35 @@
     editingWordId = null;
   }
 
+  function editCurrentWord() {
+    if (!currentQuestion) return;
+    const word = state.words.find((item) => item.id === currentQuestion.wordId);
+    if (word) openWordEditor(word);
+  }
+
+  function syncSessionWord(wordId) {
+    if (!wordId || !session) return;
+    const word = state.words.find((item) => item.id === wordId);
+    if (!word) return;
+    session.questions.forEach((question) => {
+      if (question.wordId !== wordId) return;
+      question.word = word.word;
+      question.pack = word.pack;
+      question.explanation = buildExplanation(word);
+    });
+    const activeQuestion = session.questions[session.index];
+    if (activeQuestion?.wordId !== wordId) return;
+    currentQuestion = activeQuestion;
+    if (!$("feedbackCard").classList.contains("hidden")) {
+      $("feedbackExplanation").textContent = activeQuestion.explanation;
+    } else {
+      $("questionPrompt").textContent = activeQuestion.word;
+      $("questionPack").textContent = activeQuestion.pack || "未分类";
+    }
+  }
+
   function saveWordEditor() {
+    const savedWordId = editingWordId;
     const wasEditing = Boolean(editingWordId);
     const wordText = $("editorWordInput").value.trim();
     const meaning = $("editorMeaningInput").value.trim();
@@ -373,6 +404,7 @@
     saveState();
     closeWordEditor();
     renderAll();
+    syncSessionWord(savedWordId);
     showToast(wasEditing ? "词条已更新。" : "新词已加入词库。");
     renderSearchResults();
   }
@@ -388,13 +420,7 @@
     grid.replaceChildren();
 
     const packs = [...new Set(state.words.map((word) => word.pack || "未分类"))]
-      .sort((a, b) => {
-        const matchA = a.match(/^(成语|实词)·第(\d+)组$/);
-        const matchB = b.match(/^(成语|实词)·第(\d+)组$/);
-        if (!matchA || !matchB) return a.localeCompare(b, "zh-CN");
-        if (matchA[1] !== matchB[1]) return matchA[1] === "成语" ? -1 : 1;
-        return Number(matchA[2]) - Number(matchB[2]);
-      });
+      .sort(comparePackNames);
 
     $("chapterEmpty").classList.toggle("hidden", packs.length > 0);
 
@@ -851,8 +877,8 @@
     const unseen = words.filter((word) => !state.progress[word.id]);
     const rest = words.filter((word) => !state.progress[word.id] || !due.includes(word) && !wrong.includes(word));
 
-    if (questionType === "wrong") words = wrong;
-    else words = dedupeById([...shuffle(due), ...shuffle(wrong), ...shuffle(unseen), ...shuffle(rest)]);
+    if (questionType === "wrong") words = sortWordsForReview(wrong);
+    else words = dedupeById([...sortWordsForReview(due), ...sortWordsForReview(wrong), ...sortWordsByLearningOrder(unseen), ...sortWordsByLearningOrder(rest)]);
 
     words = words.slice(0, state.settings.sessionSize);
     if (!words.length) {
@@ -872,27 +898,27 @@
       const studiedToday = Object.values(state.progress).filter((progress) => progress.firstSeen === todayKey()).length;
       const remaining = Math.max(state.settings.dailyNew - studiedToday, 0);
       const amount = Math.min(state.settings.sessionSize, remaining || state.settings.sessionSize);
-      words = getNewWords().slice(0, amount);
+      words = sortWordsByLearningOrder(getNewWords()).slice(0, amount);
     }
     if (mode === "wrong") {
       words = getWrongWords();
       questionType = "comprehensive";
     }
     if (mode === "mixed") {
-      const due = shuffle(getDueWords());
-      const fresh = shuffle(getNewWords());
+      const due = sortWordsForReview(getDueWords());
+      const fresh = sortWordsByLearningOrder(getNewWords());
       const dueTarget = Math.ceil(state.settings.sessionSize * 0.6);
       words = dedupeById([
         ...due.slice(0, dueTarget),
         ...fresh.slice(0, state.settings.sessionSize - Math.min(dueTarget, due.length))
       ]);
       if (words.length < state.settings.sessionSize) {
-        const fallback = shuffle([...getWrongWords(), ...getWordsLearnedBeforeToday()]);
+        const fallback = dedupeById([...getWrongWords(), ...sortWordsByLearningOrder(getWordsLearnedBeforeToday())]);
         words = dedupeById([...words, ...fallback]).slice(0, state.settings.sessionSize);
       }
     }
 
-    words = shuffle(dedupeById(words)).slice(0, state.settings.sessionSize);
+    words = dedupeById(words).slice(0, state.settings.sessionSize);
     if (!words.length) {
       showToast(mode === "due" ? "今天没有到期复习。" : "当前没有符合条件的词语。");
       return;
@@ -903,11 +929,13 @@
 
   function startSessionFromWords(words, mode, questionType = "comprehensive", pack = "") {
     clearAutoAdvanceTimer();
+    const uniqueWords = dedupeById(words);
     session = {
       mode,
       pack,
       questionType,
-      questions: words.map((word, index) => createQuestion(word, index, questionType)),
+      questions: uniqueWords.map((word, index) => createQuestion(word, Math.floor(index / REVIEW_GROUP_SIZE) + 1)),
+      initialTotal: uniqueWords.length,
       index: 0,
       results: [],
       wrongWords: []
@@ -925,7 +953,7 @@
     return { value: item.meaning, correct, wordId: item.id, word: item.word, meaning: item.meaning || "" };
   }
 
-  function createQuestion(word) {
+  function createQuestion(word, group = 1) {
     return {
       wordId: word.id,
       word: word.word,
@@ -936,7 +964,10 @@
       options: [],
       correctValue: "",
       explanation: buildExplanation(word),
-      pack: word.pack
+      pack: word.pack,
+      group,
+      retryCount: 0,
+      lastAnswerCorrect: null
     };
   }
   function buildExplanation(word) {
@@ -1003,15 +1034,18 @@
 
     $("quizQuestionArea").classList.remove("hidden");
     $("quizSummaryArea").classList.add("hidden");
+    const currentGroup = currentQuestion.group || 1;
     $("quizModeLabel").textContent = session.mode === "chapter"
-      ? `章节 · ${session.pack || "未分类"}`
-      : (MODE_LABELS[session.mode] || "刷题");
+      ? `章节 · ${session.pack || "未分类"} · 第${currentGroup}小节`
+      : `${MODE_LABELS[session.mode] || "刷题"} · 第${currentGroup}小节`;
     const isCard = currentQuestion.type === "card";
     $("quizTitle").textContent = isCard ? "" : currentQuestion.word;
     $("quizTitle").classList.toggle("hidden", isCard);
     $("quizCounter").textContent = `${session.index + 1} / ${session.questions.length}`;
     $("quizProgress").style.width = `${Math.round((session.index / session.questions.length) * 100)}%`;
-    $("questionTypeBadge").textContent = currentQuestion.typeLabel;
+    $("questionTypeBadge").textContent = currentQuestion.retryCount
+      ? `回炉第${currentQuestion.retryCount + 1}次`
+      : currentQuestion.typeLabel;
     $("questionPack").textContent = currentQuestion.pack || "未分类";
     $("questionMeta").classList.toggle("center", isCard);
     $("questionPrompt").classList.toggle("word-focus", isCard);
@@ -1029,6 +1063,7 @@
     $("summaryAgainBtn").classList.add("hidden");
     $("summaryCloseBtn").classList.add("hidden");
     $("quizAutoAdvanceToggle").checked = state.settings.autoAdvance !== false;
+    $("quizEditWordBtn").classList.remove("hidden");
   }
 
   function revealMeaning() {
@@ -1044,6 +1079,7 @@
   function assessCard(isKnown) {
     if (!currentQuestion || answered) return;
     answered = true;
+    currentQuestion.lastAnswerCorrect = isKnown;
     recordAnswer(currentQuestion, isKnown);
     const progress = state.progress[currentQuestion.wordId];
     if (!isKnown && progress) {
@@ -1052,8 +1088,8 @@
     }
     $("selfAssessmentActions").classList.add("hidden");
     $("feedbackTitle").textContent = isKnown
-      ? `记住了 · 下次复习：${formatShortDate(progress.nextReview)}`
-      : "已加入错题本 · 今天会再次复习";
+      ? `记住了 · 记忆度 ${progress.retention ?? 0}% · 下次复习：${formatShortDate(progress.nextReview)}`
+      : "没记住 · 将在 3 题后再次出现";
     $("quizNextBtn").classList.remove("hidden");
     if (isKnown && state.settings.autoAdvance !== false) {
       const index = session.index;
@@ -1073,6 +1109,7 @@
     const progress = getOrCreateProgress(word.id);
     const intervals = state.settings.intervals;
     progress.attemptCount = (progress.attemptCount || 0) + 1;
+    progress.reviewTimes = (progress.reviewTimes || 0) + 1;
     progress.lastReview = todayKey();
     progress.lastResult = isCorrect ? "correct" : "wrong";
 
@@ -1080,12 +1117,16 @@
       progress.correctCount = (progress.correctCount || 0) + 1;
       progress.correctStreak = (progress.correctStreak || 0) + 1;
       progress.stage = Math.min((progress.stage || 0) + 1, 5);
+      progress.retention = Math.min((progress.retention || 0) + 20, 100);
+      progress.reviewStatus = progress.stage >= 5 ? "mastered" : "reviewing";
       const intervalIndex = Math.min(Math.max(progress.stage - 1, 0), intervals.length - 1);
       progress.nextReview = addDaysKey(intervals[intervalIndex]);
     } else {
       progress.wrongCount = (progress.wrongCount || 0) + 1;
       progress.correctStreak = 0;
-      progress.stage = 0;
+      progress.retention = Math.max((progress.retention || 0) - 25, 0);
+      progress.stage = Math.max((progress.stage || 0) - 1, 0);
+      progress.reviewStatus = "learning";
       progress.nextReview = todayKey();
     }
 
@@ -1291,6 +1332,16 @@
 
   function nextQuestion() {
     if (!session) return;
+    const current = session.questions[session.index];
+    if (current && current.lastAnswerCorrect === false) {
+      const retryQuestion = {
+        ...current,
+        retryCount: (current.retryCount || 0) + 1,
+        lastAnswerCorrect: null
+      };
+      const insertAt = Math.min(session.index + 4, session.questions.length);
+      session.questions.splice(insertAt, 0, retryQuestion);
+    }
     session.index += 1;
     renderQuestion();
   }
@@ -1304,12 +1355,13 @@
     $("quizQuestionArea").classList.add("hidden");
     $("quizSummaryArea").classList.remove("hidden");
     $("quizProgress").style.width = "100%";
+    $("quizEditWordBtn").classList.add("hidden");
     $("quizCounter").textContent = `${total} / ${total}`;
     $("summaryRing").textContent = `${percent}%`;
     $("summaryTitle").textContent = percent >= 80 ? "本轮掌握良好" : "本轮需要巩固";
     $("summaryText").textContent = wrong
-      ? `答错 ${wrong} 题。错词已经进入复习队列，建议立即再做一次或明天优先复习。`
-      : "本轮全部正确。达到间隔后会再次出现，避免短期遗忘。";
+      ? `本轮有 ${wrong} 次没记住，系统已安排组内回炉，并保留到错题本。`
+      : "本轮全部记牢。系统已按掌握程度安排下一次复习。";
 
     const stats = $("summaryStats");
     stats.replaceChildren();
@@ -1355,6 +1407,7 @@
   }
 
   function handleKeyboard(event) {
+    if (!$("wordEditorModal").classList.contains("hidden")) return;
     if ($("quizModal").classList.contains("hidden") || !session || session.index >= session.questions.length) return;
 
     if (!answered && /^[1-4]$/.test(event.key)) {
@@ -1377,6 +1430,9 @@
         correctCount: 0,
         wrongCount: 0,
         attemptCount: 0,
+        reviewTimes: 0,
+        retention: 0,
+        reviewStatus: "new",
         firstSeen: todayKey(),
         lastReview: "",
         lastResult: "",
@@ -1384,7 +1440,11 @@
         errorTags: {}
       };
     }
-    return state.progress[wordId];
+    const progress = state.progress[wordId];
+    progress.reviewTimes = progress.reviewTimes || 0;
+    progress.retention = progress.retention || 0;
+    progress.reviewStatus = progress.reviewStatus || "learning";
+    return progress;
   }
 
   function getWordStatus(wordId) {
@@ -1398,22 +1458,22 @@
 
   function getDueWords() {
     const today = todayKey();
-    return state.words.filter((word) => {
+    return sortWordsForReview(state.words.filter((word) => {
       const progress = state.progress[word.id];
       return progress && progress.nextReview && progress.nextReview <= today;
-    });
+    }));
   }
 
   function getNewWords() {
-    return state.words.filter((word) => !state.progress[word.id]);
+    return sortWordsByLearningOrder(state.words.filter((word) => !state.progress[word.id]));
   }
 
   function getWrongWords() {
-    return state.words
+    return sortWordsByLearningOrder(state.words
       .filter((word) => {
         const progress = state.progress[word.id];
         return progress && (progress.manualWrong || progress.wrongCount > 0) && progress.stage < 5;
-      })
+      }))
       .sort((a, b) => {
         const pa = state.progress[a.id];
         const pb = state.progress[b.id];
@@ -1422,10 +1482,10 @@
   }
 
   function getWordsLearnedBeforeToday() {
-    return state.words.filter((word) => {
+    return sortWordsByLearningOrder(state.words.filter((word) => {
       const progress = state.progress[word.id];
       return progress && progress.firstSeen < todayKey();
-    });
+    }));
   }
 
   function getTodayAttempts() {
@@ -1671,6 +1731,45 @@
     showToast.timer = window.setTimeout(() => toast.classList.add("hidden"), 2800);
   }
 
+  function parsePackOrder(pack) {
+    const match = String(pack || "").match(/^(成语|实词)·第(\d+)组$/);
+    if (!match) return null;
+    return {
+      typeRank: match[1] === "成语" ? 0 : 1,
+      groupNumber: Number(match[2])
+    };
+  }
+
+  function comparePackNames(a, b) {
+    const packA = parsePackOrder(a);
+    const packB = parsePackOrder(b);
+    if (packA && packB) {
+      return (packA.typeRank - packB.typeRank) || (packA.groupNumber - packB.groupNumber);
+    }
+    if (packA) return -1;
+    if (packB) return 1;
+    return String(a || "").localeCompare(String(b || ""), "zh-CN");
+  }
+
+  function sortWordsByLearningOrder(words) {
+    const positions = new Map(state.words.map((word, index) => [word.id, index]));
+    return [...words].sort((a, b) => (
+      comparePackNames(a.pack, b.pack) ||
+      ((positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER))
+    ));
+  }
+
+  function sortWordsForReview(words) {
+    const positions = new Map(state.words.map((word, index) => [word.id, index]));
+    return [...words].sort((a, b) => {
+      const progressA = state.progress[a.id] || {};
+      const progressB = state.progress[b.id] || {};
+      return String(progressA.nextReview || "").localeCompare(String(progressB.nextReview || "")) ||
+        ((progressA.stage || 0) - (progressB.stage || 0)) ||
+        comparePackNames(a.pack, b.pack) ||
+        ((positions.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (positions.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+    });
+  }
   function shuffle(items) {
     const array = [...items];
     for (let index = array.length - 1; index > 0; index -= 1) {

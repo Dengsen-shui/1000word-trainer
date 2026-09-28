@@ -645,6 +645,13 @@ td {
   gap: 12px;
 }
 
+#quizEditWordBtn {
+  min-height: 36px;
+  padding: 7px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .icon-btn {
   display: grid;
   width: 38px;
@@ -1034,6 +1041,15 @@ td {
   .quiz-footer {
     padding-left: 16px;
     padding-right: 16px;
+  }
+
+  .quiz-header-right {
+    gap: 6px;
+  }
+
+  #quizEditWordBtn {
+    padding: 6px 8px;
+    font-size: 11px;
   }
 
   .quiz-question-area,

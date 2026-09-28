@@ -82,7 +82,7 @@
           <button class="action-card" data-start-mode="new">
             <span class="action-icon">＋</span>
             <strong>新词速刷</strong>
-            <small>按设置拆分每日新词量</small>
+            <small>按成语组、实词组顺序学习</small>
           </button>
           <button class="action-card" data-start-mode="wrong">
             <span class="action-icon">!</span>
@@ -343,6 +343,7 @@
         </div>
         <div class="quiz-header-right">
           <span id="quizCounter" class="counter">0 / 0</span>
+          <button id="quizEditWordBtn" class="btn btn-ghost">编辑词义</button>
           <button id="quizCloseBtn" class="icon-btn" aria-label="关闭">×</button>
         </div>
       </header>
@@ -360,7 +361,7 @@
         <div id="feedbackCard" class="feedback hidden">
           <div id="feedbackTitle" class="feedback-title"></div>
           <div id="feedbackExplanation" class="feedback-explanation"></div>
-          <div id="selfAssessmentActions" class="self-assessment hidden"><button id="rememberedBtn" class="btn btn-primary">记住了</button><button id="addWrongBookBtn" class="btn btn-danger">加入错题本</button></div>
+          <div id="selfAssessmentActions" class="self-assessment hidden"><button id="rememberedBtn" class="btn btn-primary">记住了</button><button id="addWrongBookBtn" class="btn btn-danger">没记住</button></div>
           <div id="optionReview" class="option-review hidden"></div>
           <div id="extraPractice" class="extra-practice hidden"></div>
           <div id="errorTagSection" class="error-tag-section hidden">

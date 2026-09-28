@@ -1,4 +1,4 @@
-﻿const CACHE_NAME = "1000word-trainer-v18";
+﻿const CACHE_NAME = "1000word-trainer-v19";
 const APP_ASSETS = [
   "./",
   "./index.html",
