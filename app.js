@@ -17,6 +17,7 @@
     due: "到期复习",
     new: "新词速刷",
     wrong: "错题强化",
+    wrongRetry: "错题回炉",
     mixed: "混合测试"
   };
 
@@ -50,6 +51,7 @@
       words,
       progress: {},
       attempts: [],
+      wrongBookSeen: [],
       settings: { ...DEFAULT_SETTINGS }
     };
   }
@@ -83,6 +85,9 @@
         words: upgradingSeed ? fallback.words : (savedWords.length ? mergedWithNewWords : fallback.words),
         progress: upgradingSeed ? {} : (saved.progress && typeof saved.progress === "object" ? saved.progress : {}),
         attempts: upgradingSeed ? [] : (Array.isArray(saved.attempts) ? saved.attempts : []),
+        wrongBookSeen: upgradingSeed || !Array.isArray(saved.wrongBookSeen)
+          ? []
+          : saved.wrongBookSeen.filter((id) => typeof id === "string"),
         settings: {
           ...DEFAULT_SETTINGS,
           ...(saved.settings || {}),
@@ -196,6 +201,7 @@
 
   function addToWrongBook(wordId, notify = true) {
     const progress = getOrCreateProgress(wordId);
+    state.wrongBookSeen = (state.wrongBookSeen || []).filter((id) => id !== wordId);
     progress.manualWrong = true;
     progress.wrongCount = Math.max(progress.wrongCount || 0, 1);
     progress.correctStreak = 0;
@@ -595,6 +601,8 @@
 
   function renderWrongBook() {
     const words = getWrongWords();
+    const plan = getWrongBookBatch(words);
+    const batchInfo = $("wrongBookBatchInfo");
     const body = $("wrongBookTableBody");
     body.replaceChildren();
 
@@ -623,12 +631,20 @@
       body.append(row);
     });
 
+    if (!words.length) {
+      batchInfo.textContent = "";
+    } else if (plan.restarted) {
+      batchInfo.textContent = `当前一轮已经完成，下一轮将从头开始，共 ${words.length} 个错词。`;
+    } else {
+      batchInfo.textContent = `已完成 ${plan.seenCount} / ${words.length}，下一轮继续练 ${plan.words.length} 个词。`;
+    }
     $("wrongBookEmpty").classList.toggle("hidden", words.length > 0);
   }
 
   function removeFromWrongBook(wordId, notify = true) {
     const progress = state.progress[wordId];
     if (!progress) return;
+    state.wrongBookSeen = (state.wrongBookSeen || []).filter((id) => id !== wordId);
     progress.manualWrong = false;
     progress.wrongCount = 0;
     progress.stage = Math.max(progress.stage || 0, 3);
@@ -901,7 +917,12 @@
       words = sortWordsByLearningOrder(getNewWords()).slice(0, amount);
     }
     if (mode === "wrong") {
-      words = getWrongWords();
+      const plan = getWrongBookBatch(getWrongWords());
+      words = plan.words;
+      if (plan.restarted) {
+        state.wrongBookSeen = [];
+        saveState();
+      }
       questionType = "comprehensive";
     }
     if (mode === "mixed") {
@@ -935,6 +956,7 @@
       pack,
       questionType,
       questions: uniqueWords.map((word, index) => createQuestion(word, Math.floor(index / REVIEW_GROUP_SIZE) + 1)),
+      initialWordIds: uniqueWords.map((word) => word.id),
       initialTotal: uniqueWords.length,
       index: 0,
       results: [],
@@ -1380,6 +1402,11 @@
       stats.append(card);
     });
 
+    if (session.mode === "wrong" && session.initialWordIds?.length) {
+      state.wrongBookSeen = [...new Set([...(state.wrongBookSeen || []), ...session.initialWordIds])];
+      saveState();
+    }
+
     $("quizSubmitBtn").classList.add("hidden");
     $("quizNextBtn").classList.add("hidden");
     $("summaryAgainBtn").classList.toggle("hidden", !session.wrongWords.length);
@@ -1392,7 +1419,7 @@
   function retryWrongWords() {
     if (!session?.wrongWords?.length) return;
     const words = state.words.filter((word) => session.wrongWords.includes(word.id));
-    startSessionFromWords(words, "wrong");
+    startSessionFromWords(words, "wrongRetry");
   }
 
   function closeQuiz() {
@@ -1468,6 +1495,22 @@
     return sortWordsByLearningOrder(state.words.filter((word) => !state.progress[word.id]));
   }
 
+  function getWrongBookBatch(words) {
+    const batchSize = Math.max(Number(state.settings.sessionSize) || 20, 1);
+    const seen = new Set(state.wrongBookSeen || []);
+    let pending = words.filter((word) => !seen.has(word.id));
+    let restarted = false;
+    if (!pending.length && words.length) {
+      pending = [...words];
+      restarted = true;
+    }
+    return {
+      words: pending.slice(0, batchSize),
+      restarted,
+      seenCount: Math.max(words.length - pending.length, 0),
+      total: words.length
+    };
+  }
   function getWrongWords() {
     return sortWordsByLearningOrder(state.words
       .filter((word) => {
@@ -1701,6 +1744,7 @@
     if (!confirmed) return;
     state.progress = {};
     state.attempts = [];
+    state.wrongBookSeen = [];
     saveState();
     renderAll();
     showToast("学习进度已清空，题库仍保留。");
