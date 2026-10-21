@@ -65,7 +65,8 @@
       const fallback = createInitialState();
       const savedWords = Array.isArray(saved.words) ? saved.words : [];
       const versionChanged = Number(saved.seedVersion || 0) !== fallback.seedVersion;
-      const upgradingSeed = versionChanged && savedWords.length <= 30;
+      const hasLocalOverrides = savedWords.some((word) => word.localOverride);
+      const upgradingSeed = versionChanged && savedWords.length <= 30 && !hasLocalOverrides;
       const seedById = new Map(fallback.words.map((word) => [word.id, word]));
       const seedByWord = new Map(fallback.words.map((word) => [word.word, word]));
       const mergedWords = savedWords.map((word) => {
